@@ -19,6 +19,7 @@ class StateMachine
 {
 public:
 	bool bLock;
+	bool bNeedShutDown;
 	enum class InputType
 	{
 		SpeedUp,
@@ -41,6 +42,7 @@ public:
 
 	void ChangeStateMachine(InputType type);
 	void RegisterShip(int ship);
+	void FTLShutDown();
 };
 
 struct AnimationInfo
