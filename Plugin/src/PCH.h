@@ -100,6 +100,7 @@
 // Clib
 #include "RE/Starfield.h"
 #include "SFSE/SFSE.h"
+#include "fmt/core.h"
 
 // winnt
 #include <ShlObj_core.h>
