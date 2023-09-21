@@ -33,7 +33,7 @@ std::string n2hexstr(int w, size_t hex_len = sizeof(int) << 1)
 	return rc;
 }
 
-void SetActorValue(int formID, std::string name, int value)
+void SetActorValue(int formID, std::string name, float value)
 {
 	std::string result = fmt::format("{}.setav {} {}", n2hexstr(formID), name, value);
 	ExecuteCommand(0, result.data());
@@ -42,6 +42,12 @@ void SetActorValue(int formID, std::string name, int value)
 void SetGS(std::string name, float value)
 {
 	std::string result = fmt::format("SetGS \"{}\" {}", name, value);
+	ExecuteCommand(0, result.data());
+}
+
+void CallCommand(std::string name, float value)
+{
+	std::string result = fmt::format("{} {}", name, value);
 	ExecuteCommand(0, result.data());
 }
 
@@ -56,9 +62,9 @@ DWORD Animation(LPVOID lpParam)
 	for (int frame = 0; frame < hsInfo->iTotalFrames; frame++) {
 		SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipenginepartmaxforwardspeed", Interpolation(hsInfo->iTotalFrames, frame, hsInfo->iBeginMFS, hsInfo->iEndMFS));
 		//SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipenginepartmaxbackwardspeed", Interpolation(hsInfo->iTotalFrames, frame, hsInfo->iBeginMFS, hsInfo->iEndMFS) / 2);
-		SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipforwardspeedmult", std::max(hsInfo->iBeginFSM, hsInfo->iEndFSM));
+		SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipforwardspeedmult", Interpolation(hsInfo->iTotalFrames, frame, hsInfo->iBeginFSM, hsInfo->iEndFSM));
 		SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipboostspeed", Interpolation(hsInfo->iTotalFrames, frame, hsInfo->iBeginBS, hsInfo->iEndBS));
-		SetGS("fFlightCameraFOV:FlightCamera", Interpolation(hsInfo->iTotalFrames, frame, hsInfo->iBeginFOV, hsInfo->iEndFOV));
+		SetGS("fFlightCameraFOV:FlightCamera", Interpolation(hsInfo->iTotalFrames, frame, hsInfo->fBeginFOV, hsInfo->fEndFOV));
 		Sleep(TimePerFrameAnimation);
 	}
 	StateMachine::GetInstance().bLock = 0;
@@ -66,13 +72,15 @@ DWORD Animation(LPVOID lpParam)
 	return 0;
 }
 
-State::State(int idx, int mfs, int fsm, int bs, int fov)
+State::State(int idx, int mfs, int fsm, int bs, float fov, float timeScale = 1, float angularVelocityScale = 1.5)
 {
 	iIndex = idx;
 	iMaxForwardSpeed = mfs;
 	iForwardSpeedMult = fsm;
 	iBoostSpeed = bs;
-	iFov = fov;
+	fFov = fov;
+	fTimeScale = timeScale;
+	fAngularVelocityScale = angularVelocityScale;
 }
 
 void State::Enter()
@@ -83,7 +91,7 @@ void State::Enter()
 	//SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipenginepartmaxbackwardspeed", iMaxForwardSpeed / 2);
 	SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipforwardspeedmult", iForwardSpeedMult);
 	SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipboostspeed", iBoostSpeed);
-	SetGS("fFlightCameraFOV:FlightCamera", iFov);
+	SetGS("fFlightCameraFOV:FlightCamera", fFov);
 	StateMachine::GetInstance().iCurrentState = iIndex;
 
 	if (iIndex == 6) {
@@ -102,7 +110,9 @@ void State::Enter()
 
 void State::Exit(State& target)
 {
-	if (StateMachine::GetInstance().bNeedShutDown && iIndex == 5 && target.iIndex == 4) {
+	bool bSpeedUp = target.iIndex > iIndex;
+	const int iAnimationTime = bSpeedUp ? 1000 : 500;
+	if (StateMachine::GetInstance().bNeedShutDown && iIndex == 5 && !bSpeedUp) {
 		SFSE::log::info("FTLShutDown", target.iIndex);
 		StateMachine::GetInstance().bNeedShutDown = false;
 		StateMachine::GetInstance().FTLShutDown();
@@ -110,17 +120,15 @@ void State::Exit(State& target)
 	}
 	StateMachine::GetInstance().bLock = 1;
 	SFSE::log::info("Level change to {}", target.iIndex);
-	int animationTime = 500;
-	if (target.iIndex > iIndex) {
-		animationTime = 1000;
-	}
 	// Logger->Print(fmt::format("State {} -> {}", iIndex, target.iIndex).c_str(), 0);
 	AnimationInfo* hsInfo = new AnimationInfo{ target, 
-		animationTime / TimePerFrameAnimation, 
+		iAnimationTime / TimePerFrameAnimation, 
 		iMaxForwardSpeed, target.iMaxForwardSpeed, 
 		iForwardSpeedMult, target.iForwardSpeedMult, 
 		iBoostSpeed, target.iBoostSpeed, 
-		iFov, target.iFov };
+		fFov, target.fFov,
+		fTimeScale, target.fTimeScale,
+		fAngularVelocityScale, target.fAngularVelocityScale};
 	CreateThread(NULL, 0, Animation, hsInfo, 0, NULL);
 }
 
@@ -132,8 +140,8 @@ StateMachine::StateMachine()
 	vStateList.push_back(State(3, 4000000, 10000000, 150, 100));
 	vStateList.push_back(State(4, 50000000, 30000000, 1500, 105)); // 0.1c
 	vStateList.push_back(State(5, 300000000, 300000000, 1500, 125)); // 1c
-	vStateList.push_back(State(6, 330000000, 300000000, 1500, 127));  // x3
-	vStateList.push_back(State(7, 400000000, 300000000, 1500, 130));  // x100
+	vStateList.push_back(State(6, 330000000, 300000000, 1500, 127, 3, 0.1));  // x3
+	vStateList.push_back(State(7, 400000000, 300000000, 1500, 130, 50, 0.001));  // x100
 	iCurrentState = 0;
 	iCurrentShip = 0;
 	bLock = 0;

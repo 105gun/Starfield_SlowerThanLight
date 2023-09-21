@@ -7,8 +7,11 @@ public:
 	int iMaxForwardSpeed;
 	int iForwardSpeedMult;
 	int iBoostSpeed;
-	int iFov;
-	State(int idx, int mfs, int fsm, int bs, int fov);
+	float fFov;
+	float fTimeScale;
+	float fAngularVelocityScale;
+
+	State(int idx, int mfs, int fsm, int bs, float fov);
 
 	void Enter();
 
@@ -55,6 +58,10 @@ struct AnimationInfo
 	int    iEndFSM;
 	int    iBeginBS;
 	int    iEndBS;
-	int    iBeginFOV;
-	int    iEndFOV;
+	float    fBeginFOV;
+	float    fEndFOV;
+	float    fBeginTimeScale;
+	float    fEndTimeScale;
+	float    fBeginAngularVelocityScale;
+	float    fEndAngularVelocityScale;
 };
