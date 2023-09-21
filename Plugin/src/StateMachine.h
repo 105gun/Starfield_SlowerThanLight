@@ -11,7 +11,7 @@ public:
 	float fTimeScale;
 	float fAngularVelocityScale;
 
-	State(int idx, int mfs, int fsm, int bs, float fov);
+	State(int idx, int mfs, int fsm, int bs, float fov, float timeScale, float angularVelocityScale);
 
 	void Enter();
 
@@ -22,6 +22,7 @@ class StateMachine
 {
 public:
 	bool bLock;
+	bool bShutingDown;
 	bool bNeedShutDown;
 	enum class InputType
 	{
@@ -46,11 +47,13 @@ public:
 	void ChangeStateMachine(InputType type);
 	void RegisterShip(int ship);
 	void FTLShutDown();
+	void ShutdownUpdate();
+	void ShutdownExit();
 };
 
 struct AnimationInfo
 {
-	State& target;
+	State* target;
 	int    iTotalFrames;
 	int    iBeginMFS;
 	int    iEndMFS;
