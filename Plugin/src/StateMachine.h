@@ -1,5 +1,3 @@
-
-
 class State
 {
 public:
@@ -38,6 +36,7 @@ public:
 
 	unsigned int       iCurrentShip = 0;
 	int                iCurrentState = 0;
+	RE::TESObjectREFR* pCurrentShip = 0;
 	std::vector<State> vStateList;
 
 	StateMachine();
@@ -45,7 +44,8 @@ public:
 	State& GetCurrentState();
 
 	void ChangeStateMachine(InputType type);
-	void RegisterShip(int ship);
+	void RegisterShip(RE::TESObjectREFR* ship);
+	void ExitShip();
 	void FTLShutDown();
 	void ShutdownUpdate();
 	void ShutdownExit();

@@ -117,5 +117,6 @@ using namespace REL::literals;
 #include "Plugin.h"
 
 // DKUtil
+#include "DKUtil/Config.hpp"
 #include "DKUtil/Hook.hpp"
 #include "DKUtil/Logger.hpp"
