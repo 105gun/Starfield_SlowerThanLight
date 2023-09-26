@@ -22,7 +22,7 @@ DLLEXPORT constinit auto SFSEPlugin_Version = []() noexcept {
 	return data;
 }();
 
-static REL::Relocation<__int64 (*)(double, char*, ...)> ExecuteCommand{ REL::Offset(0x287DF04) };
+static REL::Relocation<__int64 (*)(double, char*, ...)> ExecuteCommand{ REL::ID(166307) };  // From Console-Command-Runner-SF
 auto*                                                   Logger = RE::ConsoleLog::GetSingleton();
 const int                                               TimePerFrame = 50;
 const int                                               TimePerFrameAnimation = 16;
@@ -166,15 +166,14 @@ void State::Exit(State& target)
 }
 
 
-class hkQuicksave
+class hkQuicksave // From BakaQuickFullSaves
 {
 public:
 	static void Install()
 	{
-		static REL::Relocation<std::uintptr_t> target{ REL::Offset(0x023B31FC), 0xCF };
+		static REL::Relocation<std::uintptr_t> target{ REL::Offset(0x023B634C), 0xCF };
 		auto&                                  trampoline = SFSE::GetTrampoline();
 		_Quicksave = trampoline.write_call<5>(target.address(), Quicksave);
-		_LoadMostRecent = { REL::Offset(0x023A3EF0) };
 	}
 
 private:
@@ -186,12 +185,18 @@ private:
 			SHUTDOWN_FLAG = 0;
 			ExecuteCommand(0, std::string("sgtm 1").data());
 			// StateMachine::GetCurrentState().bLock = 0;
-			_LoadMostRecent();
+			LoadMostRecent();
 		}
 	}
 
+	static bool LoadMostRecent()
+	{
+		using func_t = decltype(&LoadMostRecent);
+		static REL::Relocation<func_t> func{ REL::Offset(0x023A7040) };
+		return func();
+	}
+
 	inline static REL::Relocation<decltype(&Quicksave)> _Quicksave;
-	inline static REL::Relocation<bool (*)()>           _LoadMostRecent;
 };
 
 StateMachine::StateMachine()
@@ -350,7 +355,6 @@ void ExtraTest(RE::TESObjectREFR* ship)
 	;
 }
 
-
 static DWORD MainLoop(void* unused)
 {
 	(void)unused;
@@ -361,8 +365,11 @@ static DWORD MainLoop(void* unused)
 		int   down = SFSE::WinAPI::GetKeyState(34);
 		int   stop = SFSE::WinAPI::GetKeyState(46);*/
 		auto* player = RE::Actor::PlayerCharacter();
+		//SFSE::log::info("WTF2 {}", (int)player);
 		if (player) {
-			RE::TESObjectREFR* ship = player->GetAttachedSpaceship();
+			RE::TESObjectREFR* ship = player->GetSpaceship();
+			SFSE::log::info("WTF2 {}", (int)ship);
+			//RE::TESObjectREFR* ship = 0;
 			if (ship) {
 				// On some ship or station
 				// SFSE::log::info("CRT_SHIP {} {} {} {}", n2hexstr(ship->formID), RE::PlayerCamera::GetSingleton()->IsInFirstPerson(), RE::PlayerCamera::GetSingleton()->IsInThirdPerson(), ship->GetActorValue(*RE::ActorValue::GetSingleton()->spaceshipCustomized));
@@ -450,7 +457,7 @@ namespace
 			{
 				hkQuicksave::Install();
 				Config::Load();
-				SpaceShipHistory::GetInstance().ReadFromFile();
+				//SpaceShipHistory::GetInstance().ReadFromFile();
 				CreateThread(NULL, 0, MainLoop, NULL, 0, NULL);
 				CreateThread(NULL, 0, ConsoleMonitorThread, NULL, 0, NULL);
 				break;
