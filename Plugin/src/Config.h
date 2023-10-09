@@ -1,15 +1,40 @@
 class HotkeyItem
 {
 public:
+	const int iTriggerThreshold = 191;
+
 	std::vector<int> vHotkeyList;
 	std::string      sName;
+	XINPUT_STATE     sGamePadState;
 
 	bool IsPressed() {
 		if (vHotkeyList.size() == 0)
 			return false;
 		for (auto& i : vHotkeyList) {
-			if (SFSE::WinAPI::GetKeyState(i) >= 0) {
+			if (i < SFSE::InputMap::kMacro_MouseButtonOffset) {
+				// Keyboard
+				if (SFSE::WinAPI::GetKeyState(i) >= 0) {
+					return false;
+				}
+			} else if (i < SFSE::InputMap::kMacro_GamepadOffset) {
+				// Unavailable
 				return false;
+			} else if (i < SFSE::InputMap::kMaxMacros) {
+				// GamePad
+				if (XInputGetState(0, &sGamePadState) != ERROR_SUCCESS) {
+					return false;
+				}
+				if (i == SFSE::InputMap::kGamepadButtonOffset_LT) {
+					if (sGamePadState.Gamepad.bLeftTrigger < iTriggerThreshold) {
+						return false;
+					}
+				} else if (i == SFSE::InputMap::kGamepadButtonOffset_RT) {
+					if (sGamePadState.Gamepad.bRightTrigger < iTriggerThreshold) {
+						return false;
+					}
+				} else if (!(sGamePadState.Gamepad.wButtons & SFSE::InputMap::GamepadKeycodeToMask(i))) {
+					return false;
+				}
 			}
 		}
 		return true;
@@ -17,6 +42,7 @@ public:
 
 	void Register(std::string name, std::string key, std::string defaultKey) {
 		sName = name;
+		ZeroMemory(&sGamePadState, sizeof(XINPUT_STATE));
 		_Register(key);
 		if (vHotkeyList.size() == 0) {
 			SFSE::log::info("Warning! Hotkey {} set fail. Using {}", key, defaultKey);

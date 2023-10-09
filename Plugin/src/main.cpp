@@ -51,6 +51,16 @@ void SetGS(std::string name, float value)
 	ExecuteCommand(0, result.data());
 }
 
+void SetFlightCameraSpeedOffsetGS(float value)
+{
+	SetGS("fFlightCameraSpeedOffsetMinX:FlightCamera", -value);
+	SetGS("fFlightCameraSpeedOffsetMinY:FlightCamera", -value);
+	SetGS("fFlightCameraSpeedOffsetMinZ:FlightCamera", -value);
+	SetGS("fFlightCameraSpeedOffsetMaxX:FlightCamera", value);
+	SetGS("fFlightCameraSpeedOffsetMaxY:FlightCamera", value);
+	SetGS("fFlightCameraSpeedOffsetMaxZ:FlightCamera", value);
+}
+
 void GetActorValue(int formID, std::string name)
 {
 	std::string result = fmt::format("{}.getav {}", n2hexstr(formID), name);
@@ -137,7 +147,8 @@ void State::Enter()
 	//SetActorValue(StateMachine::GetInstance().iCurrentShip, "spaceshipboostspeed", iBoostSpeed);
 	SetGS("fFlightCameraFOV:FlightCamera", fFov);
 	CallCommand("sgtm", fTimeScale);
-	SetGS("fSpaceshipMaxAngularVelocityScale", fAngularVelocityScale);
+	SetGS("fSpaceshipMaxAngularVelocityScale", fAngularVelocityScale); // Origin value: 1.5
+	SetGS("fSpaceshipAngularAccelScale", fAngularVelocityScale / 3 * 4); // Origin value: 2
 	StateMachine::GetInstance().iCurrentState = iIndex;
 }
 
@@ -208,8 +219,8 @@ StateMachine::StateMachine()
 	vStateList.push_back(State(4, 50000000, 30000000, 1500, 105));                  // 0.1c
 	vStateList.push_back(State(5, 300000000, 300000000, 1500, 125));                // 1c
 	vStateList.push_back(State(6, 450000000, 300000000, 1500, 130, 3, 0.1));        // x3
-	vStateList.push_back(State(7, 1500000000, 300000000, 1500, 132, 50, 0.001));     // x50
-	vStateList.push_back(State(8, 1500000000, 300000000, 1500, 135, 75, 0.0001));  // x75
+	vStateList.push_back(State(7, 1500000000, 300000000, 1500, 132, 50, 0.001));    // x50
+	vStateList.push_back(State(8, 1500000000, 300000000, 1500, 135, 75, 0));		// x75
 	iCurrentState = 0;
 	iCurrentShip = 0;
 	bLock = 0;
@@ -244,13 +255,17 @@ void StateMachine::RegisterShip(RE::TESObjectREFR* ship)
 	PrintInfo(fmt::format("Registering {}", ship->GetDisplayFullName()));
 	iCurrentShip = ship->formID;
 	pCurrentShip = ship;
-	// TODO: Get origin value here
-	// SpaceShipHistory::GetInstance().GetAndSet(iCurrentShip);
+	// Set Camera
+	SetGS("fFlightCameraOffsetBaseY:FlightCamera", -40);
+	SetFlightCameraSpeedOffsetGS(0.75);
+	RE::PlayerCamera::GetSingleton()->SetCameraState(RE::CameraState::kFirstPerson);
+	// Get origin value
 	bLock = 1;
 	target = iCurrentShip;
 	GetActorValue(iCurrentShip, "SpaceshipEnginePartMaxForwardSpeed");
 	GetActorValue(iCurrentShip, "SpaceshipForwardSpeedMult");
-	GetActorValue(iCurrentShip, "SpeedMult");
+	const auto speedMultAV = RE::ActorValue::GetSingleton()->speedMult;
+	SM = pCurrentShip->GetActorValue(*speedMultAV);
 	Sleep(2000);
 	if (MFS != 0 && FSM != 0 && MFS < 300) {
 		PrintInfo(fmt::format("Get {}: {}-{}", ship->GetDisplayFullName(), FSM, MFS));
@@ -360,16 +375,11 @@ static DWORD MainLoop(void* unused)
 	(void)unused;
 	bool upHoldFlag = false;
 	bool downHoldFlag = false;
+	bool debugHoldFlag = false;
 	for (;;) {
-		/* int up = SFSE::WinAPI::GetKeyState(33);
-		int   down = SFSE::WinAPI::GetKeyState(34);
-		int   stop = SFSE::WinAPI::GetKeyState(46);*/
-		auto* player = RE::Actor::PlayerCharacter();
-		//SFSE::log::info("WTF2 {}", (int)player);
+		auto* player = RE::PlayerCharacter::GetSingleton();
 		if (player) {
-			RE::TESObjectREFR* ship = player->GetSpaceship();
-			SFSE::log::info("WTF2 {}", (int)ship);
-			//RE::TESObjectREFR* ship = 0;
+			RE::TESObjectREFR* ship = player->GetSpaceship(false);
 			if (ship) {
 				// On some ship or station
 				// SFSE::log::info("CRT_SHIP {} {} {} {}", n2hexstr(ship->formID), RE::PlayerCamera::GetSingleton()->IsInFirstPerson(), RE::PlayerCamera::GetSingleton()->IsInThirdPerson(), ship->GetActorValue(*RE::ActorValue::GetSingleton()->spaceshipCustomized));
@@ -383,7 +393,7 @@ static DWORD MainLoop(void* unused)
 						StateMachine::GetInstance().ExitShip();
 					}
 				} else {
-					// On last ship
+					// On current ship
 					// Do nothing				
 				}
 			} else {
@@ -393,6 +403,7 @@ static DWORD MainLoop(void* unused)
 				}
 			}
 			if (StateMachine::GetInstance().iCurrentShip != 0) {
+				// Input
 				// SFSE::log::info("CRT: up{} down{} uf{} df{}", std::to_string(up), std::to_string(down), std::to_string(upHoldFlag), std::to_string(downHoldFlag));
 				if (upHoldFlag && !HotkeyUp.IsPressed()) {
 					upHoldFlag = 0;
@@ -410,19 +421,9 @@ static DWORD MainLoop(void* unused)
 					StateMachine::GetInstance().ChangeStateMachine(StateMachine::InputType::SpeedDown);
 				}
 				if (HotkeySlowMotion.IsPressed()) {
-					/* static int iCount = 0;
-					if (ctrl < 0) {
-						if (iCount++ > 2000 / TimePerFrame) {
-							iCount = 0;
-							StateMachine::GetInstance().FTLShutDown();
-						}
-					} else {
-						iCount = 0;
-						if (!StateMachine::GetInstance().bShutingDown)
-							StateMachine::GetInstance().ShutdownUpdate();
-					}*/
-					if (!StateMachine::GetInstance().bShutingDown)
+					if (!StateMachine::GetInstance().bShutingDown) {
 						StateMachine::GetInstance().ShutdownUpdate();
+					}
 				} else {
 					if (StateMachine::GetInstance().bShutingDown) {
 						// Exit
@@ -438,6 +439,16 @@ static DWORD MainLoop(void* unused)
 				} else {
 					iCount = 0;
 				}
+				// DEBUG
+				/* if (debugHoldFlag && SFSE::WinAPI::GetKeyState(52) >= 0) {
+					debugHoldFlag = 0;
+				}
+				if (SFSE::WinAPI::GetKeyState(52) < 0 && !debugHoldFlag) {
+					auto location = StateMachine::GetInstance().pCurrentShip->data.location;
+					auto location2 = player->data.location;
+					PrintInfo(fmt::format("ship {} {} {} {} player {} {} {}", n2hexstr(StateMachine::GetInstance().iCurrentShip), location.x, location.y, location.z, location2.x, location2.y, location2.z));
+					debugHoldFlag = 1;
+				}*/
 			}
 			PrintInfoUpdte();
 		}

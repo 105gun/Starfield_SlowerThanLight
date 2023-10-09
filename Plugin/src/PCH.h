@@ -120,3 +120,5 @@ using namespace REL::literals;
 #include "DKUtil/Config.hpp"
 #include "DKUtil/Hook.hpp"
 #include "DKUtil/Logger.hpp"
+
+#include <Xinput.h> 
